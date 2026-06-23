@@ -1,18 +1,10 @@
 package dev.kmpilot.music
 
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.ComposeViewport
-import com.arkivanov.decompose.DefaultComponentContext
-import com.arkivanov.essenty.lifecycle.LifecycleRegistry
-import com.arkivanov.essenty.lifecycle.resume
-import dev.kmpilot.music.data.MusicRepository
 import dev.kmpilot.music.presentation.RootComponent
-import dev.kmpilot.music.ui.Accent
-import dev.kmpilot.music.ui.Bg
-import dev.kmpilot.music.ui.RootContent
+import dev.kmpilot.music.ui.App
+import dev.kmpilot.music.ui.buildRoot
 import kotlinx.browser.document
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,24 +14,16 @@ import kotlinx.coroutines.launch
 /**
  * Cadence — a complex, Spotify-style music app built from scratch. Exercises the patterns simple forms don't:
  * a bottom-nav shell, carousels, a collapsing detail header, a persistent mini-player overlay, and a real
- * playback state machine. Runs live in the editor like the other apps.
+ * playback state machine. This wasm entrypoint is the in-browser editor preview; Android/iOS host the same
+ * shared App(root) from commonMain.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    val lifecycle = LifecycleRegistry()
     val scope = CoroutineScope(Dispatchers.Main)
-    val root = RootComponent(DefaultComponentContext(lifecycle), scope, MusicRepository())
-    lifecycle.resume()
-    startBridgePosting()
-    startNavBridge(scope, root)
-    ComposeViewport(document.body!!) {
-        MaterialTheme(
-            colorScheme = darkColorScheme(
-                primary = Accent, background = Bg, surface = Bg,
-                onPrimary = Color.Black, onBackground = Color.White, onSurface = Color.White,
-            ),
-        ) { RootContent(root) }
-    }
+    val root = buildRoot(scope)
+    startBridgePosting() // stream the screen graph + live state to the editor (wasm preview only)
+    startNavBridge(scope, root) // accept navigate/volume commands from the editor
+    ComposeViewport(document.body!!) { App(root) }
 }
 
 private fun startBridgePosting() {

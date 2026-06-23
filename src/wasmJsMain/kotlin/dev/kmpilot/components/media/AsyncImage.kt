@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.skia.Image as SkiaImage
 
 /**
- * KMPilot component — **AsyncImage** (wasm target).
+ * wasm `actual` for **AsyncImage**.
  *
  * Loads a remote image and renders it (cover-cropped); shows [fallback] until it's ready, or if it fails.
  * Fetches the bytes in the browser and decodes them with Skia. CORS-open hosts only (the catalogue's
@@ -27,7 +27,7 @@ import org.jetbrains.skia.Image as SkiaImage
  * `actual` is the idiomatic Kotlin/Wasm path. Decoded bitmaps are cached by URL.
  */
 @Composable
-fun AsyncImage(url: String, modifier: Modifier = Modifier, fallback: @Composable () -> Unit = {}) {
+actual fun AsyncImage(url: String, modifier: Modifier, fallback: @Composable () -> Unit) {
     var bmp by remember(url) { mutableStateOf(ImageCache.peek(url)) }
     LaunchedEffect(url) { if (bmp == null) bmp = ImageCache.load(url) }
     val b = bmp
@@ -58,7 +58,7 @@ private object ImageCache {
 }
 
 /** Warm the cache for a set of images (call at startup) so screens show real covers immediately, not gradients. */
-fun warmImages(scope: CoroutineScope, urls: List<String>) {
+actual fun warmImages(scope: CoroutineScope, urls: List<String>) {
     urls.distinct().forEach { url -> scope.launch { ImageCache.load(url) } }
 }
 
