@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadence — music</title>
+    <style>
+        html, body { margin: 0; height: 100%; background: #0f1320; overflow: hidden;
+            display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; }
+        .phone { position: relative; background: #0b0d12; border-radius: 40px; padding: 11px; transform-origin: center center;
+            box-shadow: 0 22px 56px rgba(0,0,0,.5), inset 0 0 0 2px #232938; }
+        .screen { position: relative; width: 393px; height: 852px; border-radius: 31px; overflow: hidden; background: #121212; }
+        iframe { width: 100%; height: 100%; border: 0; display: block; }
+        /* simulated hardware buttons (the emulator's phone controls) */
+        .hw { position: absolute; width: 6px; background: #2a2f3a; border-radius: 3px; cursor: pointer; transition: background .1s; }
+        .hw:hover { background: #3a4150; } .hw:active { background: #4a5568; }
+        #volUp { left: -5px; top: 150px; height: 58px; }
+        #volDn { left: -5px; top: 214px; height: 58px; }
+        #power { right: -5px; top: 188px; height: 84px; }
+        .hud { position: absolute; left: 50%; top: 26px; transform: translateX(-50%); z-index: 6;
+            background: rgba(0,0,0,.78); color: #fff; padding: 9px 18px; border-radius: 22px; font-size: 14px;
+            opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+    </style>
+</head>
+<body>
+    <div class="phone" id="phone">
+        <div class="screen"><iframe id="app" src="app.html" title="Cadence"></iframe>
+            <div class="hud" id="hud"></div>
+        </div>
+        <div class="hw" id="volUp" title="Volume up"></div>
+        <div class="hw" id="volDn" title="Volume down"></div>
+        <div class="hw" id="power" title="Power"></div>
+    </div>
+    <script>
+        function fit() { document.getElementById('phone').style.transform = 'scale(' + Math.min(1, (window.innerHeight - 40) / 876) + ')'; }
+        window.addEventListener('resize', fit); fit();
+
+        // The phone frame provides the device hardware controls; the volume rocker sends a command to the app.
+        let vol = 0.85;
+        const app = () => document.getElementById('app').contentWindow;
+        function sendVol() { try { app().postMessage({ type: 'kmpilot-cmd', volume: vol }, '*'); } catch (e) {} hud('Volume ' + Math.round(vol * 100) + '%'); }
+        function setVol(v) { vol = Math.max(0, Math.min(1, Math.round(v * 100) / 100)); sendVol(); }
+        document.getElementById('volUp').onclick = () => setVol(vol + 0.1);
+        document.getElementById('volDn').onclick = () => setVol(vol - 0.1);
+        document.getElementById('power').onclick = () => hud('Power');
+        document.getElementById('app').addEventListener('load', () => setTimeout(sendVol, 1500)); // push initial volume
+        function hud(t) { const h = document.getElementById('hud'); h.textContent = t; h.style.opacity = 1; clearTimeout(h._t); h._t = setTimeout(() => h.style.opacity = 0, 1200); }
+    </script>
+</body>
+</html>
