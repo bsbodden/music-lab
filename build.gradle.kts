@@ -17,12 +17,6 @@ repositories {
     mavenCentral()
 }
 
-// Compose 1.11 + Decompose 3.5 are built against kotlinx-browser 0.3; a newer one changes the DOM-interop
-// ABI → ComposeViewport silently fails to attach its canvas (blank preview). Pin it (same as todo-lab).
-configurations.all {
-    resolutionStrategy.force("org.jetbrains.kotlinx:kotlinx-browser:0.3")
-}
-
 kotlin {
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
@@ -67,14 +61,47 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 implementation("androidx.activity:activity-compose:1.10.1")
+                // Coil3 — real remote images on Android. Uses Coil's BUNDLED OkHttp network layer
+                // (coil-network-okhttp) rather than the coil-network-ktor3 path: ktor-client-core 3.2.0 ships
+                // methods with spaces in their names, which D8 rejects on this minSdk (needs DEX format 040),
+                // breaking dexing of the APK. coil-network-okhttp auto-registers the same network fetcher and
+                // pulls no Ktor, so it dexes cleanly and produces identical real-image behavior. (iOS keeps the
+                // coil-network-ktor3 + ktor-client-darwin path — Kotlin/Native has no dexing step.)
+                implementation("io.coil-kt.coil3:coil-compose:3.2.0")
+                implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
+                // media3 ExoPlayer — real audio streaming on Android
+                implementation("androidx.media3:media3-exoplayer:1.10.1")
+            }
+        }
+        // iosMain is the intermediate source set created by the default hierarchy template; it does not exist
+        // yet when this sourceSets {} block body runs, so configure it via the live `all {}` hook which fires
+        // when the template materializes it (eager `by getting` / `named()` are too early here).
+        all {
+            if (name == "iosMain") {
+                dependencies {
+                    // Coil3 — real remote images on iOS. coil-network-ktor3 + the Darwin Ktor engine
+                    // AUTO-register the network fetcher; no manual ImageLoader setup needed. (Kotlin/Native
+                    // has no dexing step, so the ktor path that breaks Android D8 is fine here.)
+                    implementation("io.coil-kt.coil3:coil-compose:3.2.0")
+                    implementation("io.coil-kt.coil3:coil-network-ktor3:3.2.0")
+                    implementation("io.ktor:ktor-client-darwin:3.2.0")
+                }
             }
         }
     }
 }
 
+// Compose 1.11 + Decompose 3.5 are built against kotlinx-browser 0.3; a newer one changes the DOM-interop
+// ABI → ComposeViewport silently fails to attach its canvas (blank preview). Pin it (same as todo-lab).
+// NOTE: kept BELOW the kotlin {} block — eagerly realizing all configurations above it would run before the
+// default hierarchy template creates the intermediate `iosMain` source set, breaking `iosMain by getting`.
+configurations.all {
+    resolutionStrategy.force("org.jetbrains.kotlinx:kotlinx-browser:0.3")
+}
+
 android {
     namespace = "dev.kmpilot.music"
-    compileSdk = 35
+    compileSdk = 36 // media3 1.10.1 requires compiling against API 36+ (targetSdk stays 35 — runtime behavior unchanged)
     defaultConfig {
         applicationId = "dev.kmpilot.music"
         minSdk = 24
