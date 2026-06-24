@@ -5,13 +5,15 @@ import androidx.compose.ui.Modifier
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * KMPilot component — **AsyncImage**. Loads a remote image and renders it (cover-cropped); shows [fallback]
- * until it's ready, or if it fails. The wasm `actual` fetches the bytes in-browser and decodes them with Skia.
- * The Android/iOS/jvm `actual`s currently just render [fallback] (a placeholder) — real images via Coil3 are a
- * follow-up. Decoded bitmaps are cached by URL on wasm.
+ * KMPilot component — **AsyncImage**: one shared interface, a per-platform adapter behind it.
+ *
+ * Loads a remote image and renders it (cover-cropped); shows [fallback] until ready, or if it fails.
+ *  - **wasm preview** → browser `fetch` + Skia decode (CORS-open hosts only); decoded bitmaps cached by URL.
+ *  - **Android / iOS / jvm** → renders [fallback] (the monogram tile). Real Coil/AVFoundation loading is a
+ *    FOLLOW-UP; the placeholder keeps the funnel compiling + visually intact on the real targets.
  */
 @Composable
 expect fun AsyncImage(url: String, modifier: Modifier = Modifier, fallback: @Composable () -> Unit = {})
 
-/** Warm the cache for a set of images (call at startup) so screens show real covers immediately. No-op off wasm. */
+/** Warm the cache for a set of images (call at startup) so cards show real photos immediately. No-op off-wasm. */
 expect fun warmImages(scope: CoroutineScope, urls: List<String>)

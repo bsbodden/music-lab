@@ -19,12 +19,12 @@ import kotlinx.coroutines.launch
 import org.jetbrains.skia.Image as SkiaImage
 
 /**
- * wasm `actual` for **AsyncImage**.
+ * KMPilot component — **AsyncImage** (wasm target).
  *
- * Loads a remote image and renders it (cover-cropped); shows [fallback] until it's ready, or if it fails.
- * Fetches the bytes in the browser and decodes them with Skia. CORS-open hosts only (the catalogue's
- * archive.org covers qualify). On Android/iOS the same surface is backed by Coil/AVFoundation; this tiny wasm
- * `actual` is the idiomatic Kotlin/Wasm path. Decoded bitmaps are cached by URL.
+ * Loads a remote image and renders it (cover-cropped); shows [fallback] until ready, or if it fails. Fetches
+ * the bytes in the browser and decodes them with Skia. CORS-open hosts only (TheMealDB photos qualify). On
+ * Android/iOS the same surface is backed by Coil/AVFoundation; this tiny wasm `actual` is the idiomatic
+ * Kotlin/Wasm path. Decoded bitmaps are cached by URL.
  */
 @Composable
 actual fun AsyncImage(url: String, modifier: Modifier, fallback: @Composable () -> Unit) {
@@ -36,28 +36,30 @@ actual fun AsyncImage(url: String, modifier: Modifier, fallback: @Composable () 
 }
 
 private object ImageCache {
-    private val cache = HashMap<String, ImageBitmap?>()
+    private val cache = HashMap<String, ImageBitmap>()   // successes only (a null entry can't be told from "absent")
+    private val failed = HashSet<String>()               // decoded-but-undecodable bytes → never re-decode
+
     fun peek(url: String): ImageBitmap? = cache[url]
 
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun load(url: String): ImageBitmap? {
-        if (cache[url] != null) return cache[url]
+        cache[url]?.let { return it }
+        if (url in failed) return null                                // known-bad bytes: don't re-fetch/re-decode
         startFetch(url)
         repeat(400) {
             val r = readFetch(url)
-            if (r == "ERR") { cache[url] = null; return null }        // genuine failure → don't retry
             if (r.isNotEmpty()) {
-                return runCatching {
-                    SkiaImage.makeFromEncoded(Base64.decode(r)).toComposeImageBitmap()
-                }.also { cache[url] = it.getOrNull() }.getOrNull()
+                val bmp = runCatching { SkiaImage.makeFromEncoded(Base64.decode(r)).toComposeImageBitmap() }.getOrNull()
+                if (bmp != null) cache[url] = bmp else failed.add(url) // bad bytes are permanent; fetch/CORS errors are not
+                return bmp
             }
             delay(50)
         }
-        return null                                                   // timeout → leave uncached, retry later
+        return null                                                   // timeout (or a transient fetch error) → retried on next mount
     }
 }
 
-/** Warm the cache for a set of images (call at startup) so screens show real covers immediately, not gradients. */
+/** Warm the cache for a set of images (call at startup) so cards show real photos immediately. */
 actual fun warmImages(scope: CoroutineScope, urls: List<String>) {
     urls.distinct().forEach { url -> scope.launch { ImageCache.load(url) } }
 }
@@ -65,7 +67,7 @@ actual fun warmImages(scope: CoroutineScope, urls: List<String>) {
 // Fetch in the browser, stash as base64 keyed by url; Kotlin polls. Avoids Promise / typed-array interop, and
 // each js(...) is a function's sole statement (Kotlin/Wasm rule). The js can reference the `url` parameter.
 private fun startFetch(url: String) {
-    js("if(!(globalThis.__img && globalThis.__img[url])){ (globalThis.__img=globalThis.__img||{})[url]='__P'; fetch(url).then(function(r){return r.arrayBuffer();}).then(function(buf){ var a=new Uint8Array(buf); var s=''; var c=0x8000; for(var i=0;i<a.length;i+=c){ s+=String.fromCharCode.apply(null,a.subarray(i,i+c)); } globalThis.__img[url]=btoa(s); }).catch(function(){ globalThis.__img[url]='ERR'; }); }")
+    js("if(!(globalThis.__img && globalThis.__img[url])){ (globalThis.__img=globalThis.__img||{})[url]='__P'; fetch(url).then(function(r){ if(!r.ok) throw 0; return r.arrayBuffer(); }).then(function(buf){ var a=new Uint8Array(buf); var s=''; var c=0x8000; for(var i=0;i<a.length;i+=c){ s+=String.fromCharCode.apply(null,a.subarray(i,i+c)); } globalThis.__img[url]=btoa(s); }).catch(function(){ delete globalThis.__img[url]; }); }")
 }
 
 private fun readFetch(url: String): String = js("((globalThis.__img && globalThis.__img[url] && globalThis.__img[url] !== '__P') ? globalThis.__img[url] : '')")
